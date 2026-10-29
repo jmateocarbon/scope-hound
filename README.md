@@ -134,5 +134,4 @@ Depending on your lists, Runtime can vary. If youre planning to run this on a sc
 As much as I want to further enhance this with Authentication and add a DevOps pipeline for gitactions to instantly host and deploy. I currently do not have the time capacity but I am willing to talk with your ideas if you are interested!
 
 ## License
-
 MIT. See [LICENSE](LICENSE).
