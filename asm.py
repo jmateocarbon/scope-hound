@@ -24,6 +24,7 @@ MAX_CONCURRENT_TABS = 5
 PATHS_TO_CHECK = ["/", "/.git", "/config.json"]
 WEB_PORTS = [80, 81, 443, 8000, 8080, 8443]
 
+# Sample subdomains for fallback
 FALLBACK_SUBDOMAINS = [
     "www", "api", "dev", "staging", "test", "admin", 
     "portal", "vpn", "secure", "app", "shop", "store", 
@@ -32,7 +33,6 @@ FALLBACK_SUBDOMAINS = [
 ]
 
 
-# --- FILE LOADERS ---
 def load_targets(target_input: str) -> list[str]:
     """Reads target domains from a file or string and normalizes them to base apex domains."""
     raw_targets = []
