@@ -4,6 +4,12 @@ Lightweight Python-based attack surface discovery, technology fingerprinting, an
 
 ScopeHound is an open-source Python scanner for building an inventory of internet-facing assets. Provide a list of parent domains for enumeration, or skip enumeration and scan a developer-supplied list of subdomains. The tool enriches findings with Shodan InternetDB, Wappalyzer, Playwright screenshots, and DNS takeover indicators, then produces an HTML report for local review.
 
+## Project Philosophy
+
+ScopeHound is designed to be **easy to install, easy to run, and easy to understand**. It stays lightweight, open-source, CLI-first, and local-first, with straightforward commands and self-contained HTML reports. Development prioritizes **accessibility, accuracy, stability, security, and compatibility** over unnecessary features or infrastructure dependencies.
+
+ScopeHound does not include user accounts, built-in authentication, or a hosted management service. You can run it locally, in Docker, or within your own automation and infrastructure.
+
 ## Features
 
 - Subdomain discovery with **Subfinder**
@@ -90,14 +96,26 @@ docker build -t scopehound .
 Run:
 
 ```bash
-docker run --rm   -v "$PWD/domains.txt:/app/domains.txt:ro"   -v "$PWD/reports:/app/reports"   scopehound
+docker run --rm \
+  -v "$PWD/domains.txt:/app/domains.txt:ro" \
+  -v "$PWD/reports:/app/reports" \
+  scopehound
 ```
 
 Scheduled mode:
 
 ```bash
-docker run -d   --name scopehound   --restart unless-stopped   -v "$PWD/domains.txt:/app/domains.txt:ro"   -v "$PWD/reports:/app/reports"   scopehound --interval-hours 24
+docker run -d \
+  --name scopehound \
+  --restart unless-stopped \
+  -v "$PWD/domains.txt:/app/domains.txt:ro" \
+  -v "$PWD/reports:/app/reports" \
+  scopehound --interval-hours 24
 ```
+
+## Deployment and Access Control
+
+ScopeHound does not provide built-in authentication or hosted services. **Users are responsible for securing their own deployments**, including authentication, access controls, network exposure, and generated scan reports. Avoid publishing reports containing sensitive asset information to publicly accessible locations.
 
 ## Notes and limitations
 
@@ -106,7 +124,6 @@ docker run -d   --name scopehound   --restart unless-stopped   -v "$PWD/domains.
 - Port information comes from **Shodan InternetDB** when available. Fallback web targets are probe candidates, not confirmed open ports.
 - Screenshots are captured only for web targets that can be reached by Playwright.
 - Use ScopeHound only on domains and assets you own or are explicitly authorized to assess.
-- This code is not liable for personal damages.
 
 ## Security
 
