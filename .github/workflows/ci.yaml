@@ -1,0 +1,51 @@
+name: ScopeHound CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Python checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout source (pinned commit)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Show Python version
+        run: python3 --version
+
+      - name: Install Python dependencies
+        run: |
+          python3 -m venv .venv-ci
+          .venv-ci/bin/python -m pip install --disable-pip-version-check -r requirements.txt
+
+      - name: Validate Python syntax
+        run: .venv-ci/bin/python -m compileall -q asm.py takeover.py tests
+
+      - name: Run unit tests
+        run: .venv-ci/bin/python -m unittest discover -s tests -v
+
+      - name: Generate SHA-256 source manifest
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+
+          files = [Path('asm.py'), Path('takeover.py'), Path('requirements.txt')]
+          files.extend(sorted(Path('tests').glob('test_*.py')))
+          with Path('SHA256SUMS.txt').open('w', encoding='utf-8') as output:
+              for file in files:
+                  digest = hashlib.sha256(file.read_bytes()).hexdigest()
+                  output.write(f'{digest}  {file.as_posix()}\n')
+          print(Path('SHA256SUMS.txt').read_text(), end='')
+          PY
