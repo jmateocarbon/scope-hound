@@ -181,6 +181,19 @@ def fetch_shodan_internetdb(ip):
     return {}
 
 
+def get_port_candidates(internetdb_data):
+    """Return (ports to probe, evidence source), never implying an open-port scan.
+
+    Only a valid InternetDB `ports` list counts as reported intelligence.
+    When InternetDB has no usable port data, 80/443 are *probe candidates*.
+    """
+    raw_ports = internetdb_data.get('ports') if isinstance(internetdb_data, dict) else None
+    if isinstance(raw_ports, list):
+        ports = sorted({port for port in raw_ports if type(port) is int and 1 <= port <= 65535})
+        return ports, 'Shodan InternetDB'
+    return [80, 443], 'Fallback candidates (unverified)'
+
+
 # --- 2. FINGERPRINTING & SCREENSHOTS ---
 def run_wappalyzer_scan(urls):
     if not urls:
@@ -332,7 +345,13 @@ def generate_html(targets, takeover_findings=None):
         .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px; }
         .card { background:var(--bg-card); border:1px solid var(--border-color); border-radius:11px; overflow:hidden; cursor:pointer; transition:border-color .15s,box-shadow .15s; box-shadow:0 2px 9px #202a2708; }
         .card:hover {border-color:#9ca9a0;box-shadow:0 6px 16px #202a2713;}
-        .card img {width:100%;height:165px;object-fit:cover;object-position:top;border-bottom:1px solid var(--border-color);background:#eaece8;}
+        .card img {width:100%;height:165px;object-fit:cover;object-position:top;display:block;}
+        .screenshot-frame {height:165px;display:flex;align-items:center;justify-content:center;background:#f1f2ef;border-bottom:1px solid var(--border-color);overflow:hidden;}
+        .no-screenshot {font-size:12px;font-weight:600;color:var(--text-muted);text-align:center;padding:14px;}
+        .modal-screenshot-frame {min-height:200px;display:flex;align-items:center;justify-content:center;background:#f1f2ef;border-radius:7px;margin-bottom:20px;overflow:hidden;}
+        .modal-screenshot-frame:has(img:not([hidden])) {min-height:0;}
+        .modal-screenshot-frame .modal-img {width:100%;height:auto;display:block;margin:0;}
+        [hidden] {display:none !important;}
         .card-info {padding:15px;}
         .card-info h3 {margin:0 0 12px;font-size:13px;font-weight:720;word-break:break-all;}
         .badge { display:inline-flex;align-items:center;padding:4px 8px;border-radius:5px;font-size:10px;font-weight:700;margin:0 5px 7px 0;letter-spacing:.01em; }
@@ -347,7 +366,7 @@ def generate_html(targets, takeover_findings=None):
         .modal-overlay {position:fixed;inset:0;background:#18221cbf;display:none;justify-content:center;align-items:center;z-index:50;padding:20px;backdrop-filter:blur(3px);}
         .modal {background:#fff;padding:30px;border-radius:12px;max-width:800px;width:100%;max-height:90vh;overflow-y:auto;position:relative;box-shadow:0 25px 65px #1117;}
         .close-btn {position:absolute;right:15px;top:10px;background:none;border:0;font-size:28px;cursor:pointer;color:var(--text-muted);}
-        .modal-img {width:100%;border-radius:7px;margin-bottom:20px;background:#eaece8;}
+        .modal-img {width:100%;border-radius:7px;background:#eaece8;}
         .detail-row {margin-bottom:12px;border-bottom:1px solid #ebece8;padding-bottom:12px;display:flex;align-items:flex-start;}
         .detail-label {font-size:11px;color:var(--text-muted);font-weight:750;min-width:140px;text-transform:uppercase;letter-spacing:.045em;}
         .detail-value {word-break:break-word;flex:1;font-size:13px;}
@@ -390,7 +409,10 @@ def generate_html(targets, takeover_findings=None):
     <div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
         <div class="modal" onclick="event.stopPropagation()">
             <button class="close-btn" onclick="closeModal(event)">&times;</button>
-            <img id="modalImg" class="modal-img" src="" alt="Full Screenshot">
+            <div class="modal-screenshot-frame">
+                <img id="modalImg" class="modal-img" alt="Captured screenshot" hidden>
+                <div id="modalNoScreenshot" class="no-screenshot">No screenshot available</div>
+            </div>
             
             <div class="detail-row">
                 <span class="detail-label">Target Domain:</span> 
@@ -409,7 +431,7 @@ def generate_html(targets, takeover_findings=None):
                 <span class="detail-value" id="modalIp"></span>
             </div>
             <div class="detail-row">
-                <span class="detail-label">Open Ports:</span> 
+                <span class="detail-label">Port Intelligence:</span> 
                 <span class="detail-value" id="modalPorts"></span>
             </div>
             <div class="detail-row">
@@ -477,11 +499,19 @@ def generate_html(targets, takeover_findings=None):
             const card = document.createElement('div');
             card.className = 'card';
             card.addEventListener('click', () => openModal(index));
-            const img = document.createElement('img');
-            if (target.b64_img) img.src = 'data:image/jpeg;base64,' + target.b64_img;
-            img.alt = 'Screenshot of ' + target.url;
-            img.loading = 'lazy';
-            card.appendChild(img);
+            const screenshotFrame = makeText('div', '', 'screenshot-frame');
+            const fallback = () => screenshotFrame.replaceChildren(makeText('div', 'No screenshot available', 'no-screenshot'));
+            if (target.b64_img) {
+                const img = document.createElement('img');
+                img.alt = 'Captured screenshot';
+                img.loading = 'lazy';
+                img.onerror = fallback;
+                screenshotFrame.appendChild(img);
+                img.src = 'data:image/jpeg;base64,' + target.b64_img;
+            } else {
+                fallback();
+            }
+            card.appendChild(screenshotFrame);
             const info = makeText('div', '', 'card-info');
             info.appendChild(makeText('h3', target.url));
             const badges = makeText('div', '');
@@ -492,7 +522,7 @@ def generate_html(targets, takeover_findings=None):
                 status.startsWith('3xx') ? 'var(--accent-blue-bg)' : 'var(--accent-red-bg)';
             badges.appendChild(httpBadge);
             badges.appendChild(makeText('span', target.ip, 'badge ip-badge'));
-            badges.appendChild(makeText('span', 'Port ' + target.port, 'badge ip-badge'));
+            badges.appendChild(makeText('span', 'Port ' + target.port + (target.port_source === 'Shodan InternetDB' ? ' · InternetDB' : ' · probe candidate'), 'badge ip-badge'));
             info.appendChild(badges);
             const tech = makeText('div', '');
             const technology = [...new Set(target.software || [])];
@@ -565,7 +595,22 @@ def generate_html(targets, takeover_findings=None):
 
         function openModal(index) {
             const target = targetsData[index];
-            document.getElementById('modalImg').src = target.b64_img ? 'data:image/jpeg;base64,' + target.b64_img : '';
+            const modalImg = document.getElementById('modalImg');
+            const modalNoScreenshot = document.getElementById('modalNoScreenshot');
+            modalImg.hidden = true;
+            modalNoScreenshot.hidden = false;
+            modalImg.removeAttribute('src');
+            if (target.b64_img) {
+                modalImg.onerror = () => {
+                    modalImg.hidden = true;
+                    modalNoScreenshot.hidden = false;
+                };
+                modalImg.onload = () => {
+                    modalImg.hidden = false;
+                    modalNoScreenshot.hidden = true;
+                };
+                modalImg.src = 'data:image/jpeg;base64,' + target.b64_img;
+            }
             document.getElementById('modalParentDomain').textContent = target.parent_domain;
             document.getElementById('modalUrl').href = target.url;
             document.getElementById('modalUrl').textContent = target.url;
@@ -578,7 +623,7 @@ def generate_html(targets, takeover_findings=None):
             document.getElementById('modalStatus').innerHTML = `<span class="badge" style="${statusStyle}">HTTP ${target.status || 'N/A'}</span>`;
             document.getElementById('modalIp').textContent = target.ip;
             
-            const portsStr = target.all_ports && target.all_ports.length ? target.all_ports.join(', ') : 'Unknown';
+            const portsStr = target.all_ports && target.all_ports.length ? target.all_ports.join(', ') + ' (Shodan InternetDB, not live-verified)' : 'Not available (80/443 are probe candidates, not confirmed open)';
             document.getElementById('modalPorts').textContent = portsStr;
             document.getElementById('modalHttps').innerHTML = target.is_https ? '🔒 Yes' : '⚠️ No';
             
@@ -699,11 +744,11 @@ async def run_scan(domains, supplied_hosts, subdomains_wordlist, args):
 
         for ip, hosts_set in ip_to_hosts.items():
             db_data = fetch_shodan_internetdb(ip)
-            open_ports = db_data.get('ports', [80, 443])
+            candidate_ports, port_source = get_port_candidates(db_data)
             
             hosts_to_scan = list(hosts_set) if hosts_set else [ip]
 
-            for port in open_ports:
+            for port in candidate_ports:
                 if port in WEB_PORTS:
                     is_https = port in [443, 8443]
                     protocol = "https" if is_https else "http"
@@ -728,7 +773,8 @@ async def run_scan(domains, supplied_hosts, subdomains_wordlist, args):
                                     "port": port,
                                     "is_https": is_https,
                                     "software": [],
-                                    "all_ports": [str(p) for p in open_ports],
+                                    "all_ports": [str(p) for p in candidate_ports] if port_source == 'Shodan InternetDB' else [],
+                                    "port_source": port_source,
                                     "b64_img": None,
                                     "status": None
                                 })
