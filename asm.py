@@ -309,7 +309,8 @@ async def capture_screenshots(targets):
 # --- 3. HTML REPORT GENERATION ---
 def generate_html(targets, takeover_findings=None):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    os.makedirs("reports", exist_ok=True)
+    reports_dir = os.path.join(SCRIPT_DIR, "reports")
+    os.makedirs(reports_dir, exist_ok=True)
     filename = os.path.join("reports", f"scan_report_{timestamp}.html")
     output_file = os.path.join(SCRIPT_DIR, filename)
     
@@ -352,6 +353,32 @@ def generate_html(targets, takeover_findings=None):
         .modal-screenshot-frame:has(img:not([hidden])) {min-height:0;}
         .modal-screenshot-frame .modal-img {width:100%;height:auto;display:block;margin:0;}
         [hidden] {display:none !important;}
+        .asset-view {max-width:1400px;margin:0 auto 28px;}
+        .asset-back {font:inherit;background:transparent;border:0;padding:6px 0;color:var(--accent-green);font-weight:750;cursor:pointer;margin-bottom:14px;}
+        .asset-head {display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:24px;}
+        .asset-head h2 {margin:0;font-size:clamp(22px,3vw,33px);overflow-wrap:anywhere;}
+        .asset-subtitle {color:var(--text-muted);font-size:13px;margin:6px 0 0;}
+        .asset-open {color:var(--accent-green);text-decoration:none;font-weight:750;border:1px solid var(--border-color);background:#fff;border-radius:8px;padding:11px 15px;}
+        .asset-tabs {display:flex;gap:8px;flex-wrap:wrap;margin:0 0 20px;}
+        .asset-tab {font:inherit;font-size:13px;cursor:pointer;border:1px solid var(--border-color);background:#fff;color:var(--text-muted);border-radius:8px;padding:10px 16px;font-weight:700;}
+        .asset-tab.active {background:var(--text-main);color:#fff;border-color:var(--text-main);}
+        .asset-columns {display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:20px;align-items:start;}
+        .asset-panel {background:#fff;border:1px solid var(--border-color);border-radius:14px;padding:20px;min-width:0;box-shadow:0 2px 9px #202a2708;}
+        .asset-panel h3 {font-size:17px;margin:0 0 14px;}
+        .asset-screenshot-frame {min-height:310px;background:#eff1ee;border:1px solid var(--border-color);border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center;}
+        .asset-screenshot-frame img {display:block;width:100%;height:auto;max-height:620px;object-fit:contain;object-position:top;}
+        .asset-shot-caption {font-size:12px;color:var(--text-muted);margin-top:12px;}
+        .asset-row {display:grid;grid-template-columns:145px minmax(0,1fr);gap:14px;border-bottom:1px solid #e9ece8;padding:12px 0;font-size:13px;}
+        .asset-row:last-child {border-bottom:0;}
+        .asset-row-label {font-weight:700;color:var(--text-muted);}
+        .asset-row-value {min-width:0;overflow-wrap:anywhere;}
+        .asset-row-value a {color:var(--accent-green);}
+        .asset-tech-list {display:flex;flex-wrap:wrap;gap:7px;}
+        .asset-tech-list .tech-pill {margin:0;padding:7px 10px;}
+        .asset-empty {color:var(--text-muted);padding:26px 12px;text-align:center;}
+        .card:focus-visible,.asset-back:focus-visible,.asset-tab:focus-visible {outline:3px solid var(--accent-green);outline-offset:3px;}
+        @media(max-width:850px){.asset-columns{grid-template-columns:1fr}.asset-screenshot-frame{min-height:190px}}
+        @media(max-width:520px){.asset-row{grid-template-columns:1fr;gap:3px}.asset-panel{padding:15px}}
         .card-info {padding:15px;}
         .card-info h3 {margin:0 0 12px;font-size:13px;font-weight:720;word-break:break-all;}
         .badge { display:inline-flex;align-items:center;padding:4px 8px;border-radius:5px;font-size:10px;font-weight:700;margin:0 5px 7px 0;letter-spacing:.01em; }
@@ -373,14 +400,30 @@ def generate_html(targets, takeover_findings=None):
         .detail-value a {color:var(--accent-green);}
         @media(max-width:650px){.masthead{display:block}.subtitle{text-align:left;margin-top:12px}.filter-container{justify-content:flex-start}.modal{padding:20px}.detail-row{display:block}.detail-label{display:block;margin-bottom:4px}}
 
+        /* Fix v6: shared theme tokens and accessible dark appearance. */
+        :root { color-scheme:light; --surface:#ffffff; --surface-alt:#f1f2ef; --surface-soft:#f4f5f3; --divider:#e9ece8; --hover-outline:#9ca9a0; --shadow:#202a2708; --shadow-hover:#202a2713; --button-active:#202a27; --button-active-text:#ffffff; --chip-text:#53605b; }
+        html[data-theme="dark"] { color-scheme:dark; --bg-primary:#121a19; --bg-card:#1d2927; --bg-card-hover:#23332f; --border-color:#394c46; --text-main:#e8efea; --text-muted:#adbbb3; --accent-red:#ffa39d; --accent-red-bg:#4d2929; --accent-green:#7bd4a5; --accent-green-bg:#1e4236; --accent-blue:#8ecbc9; --accent-blue-bg:#223f42; --accent-amber:#e9bb79; --accent-amber-bg:#493924; --accent-purple:#bccdb6; --accent-purple-bg:#303e36; --surface:#1d2927; --surface-alt:#25332f; --surface-soft:#293833; --divider:#3b4c45; --hover-outline:#7bd4a5; --shadow:#00000020; --shadow-hover:#00000040; --button-active:#70c49a; --button-active-text:#10221a; --chip-text:#c0d3c7; }
+        html[data-theme="dark"] .filter-select, html[data-theme="dark"] .toolbar input, html[data-theme="dark"] .toolbar select, html[data-theme="dark"] .status-button, html[data-theme="dark"] .pager button, html[data-theme="dark"] .asset-tab, html[data-theme="dark"] .asset-open, html[data-theme="dark"] .asset-panel, html[data-theme="dark"] details.takeover-entry {background:var(--surface);color:var(--text-main);}
+        html[data-theme="dark"] .status-button.active, html[data-theme="dark"] .asset-tab.active {background:var(--button-active);color:var(--button-active-text);border-color:var(--button-active);}
+        html[data-theme="dark"] .card, html[data-theme="dark"] .modal {background:var(--bg-card);color:var(--text-main);box-shadow:0 2px 9px var(--shadow);}
+        html[data-theme="dark"] .card:hover {background:var(--bg-card-hover);border-color:var(--hover-outline);box-shadow:0 6px 16px var(--shadow-hover);}
+        html[data-theme="dark"] .screenshot-frame, html[data-theme="dark"] .modal-screenshot-frame, html[data-theme="dark"] .asset-screenshot-frame, html[data-theme="dark"] .modal-img {background:var(--surface-alt);}
+        html[data-theme="dark"] .asset-row, html[data-theme="dark"] .detail-row {border-bottom-color:var(--divider);}
+        html[data-theme="dark"] .ip-badge, html[data-theme="dark"] .tech-pill, html[data-theme="dark"] details.takeover-entry code {background:var(--surface-soft);border-color:var(--border-color);color:var(--chip-text);}
+        .theme-switch {font:inherit;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:130px;padding:9px 13px;border:1px solid var(--border-color);border-radius:9px;background:var(--surface);color:var(--text-main);font-size:12px;font-weight:750;cursor:pointer;white-space:nowrap;}
+        .theme-switch:hover {border-color:var(--accent-green);}
+        .theme-switch:focus-visible {outline:3px solid var(--accent-green);outline-offset:3px;}
+        .masthead-actions {display:flex;align-items:center;justify-content:flex-end;gap:18px;}
+        @media(max-width:650px){.masthead-actions{justify-content:space-between;margin-top:12px;flex-wrap:wrap}.subtitle{text-align:left;}}
     </style>
 </head>
 <body>
     <header class="masthead">
       <div><div class="eyebrow">ScopeHound</div><h1>Attack surface <span>inventory.</span></h1></div>
-      <div class="subtitle">A lightweight, local-first view of discovered assets, technologies and DNS takeover indicators.</div>
+      <div class="masthead-actions"><div class="subtitle">A lightweight, local-first view of discovered assets, technologies and DNS takeover indicators.</div><button id="themeToggle" class="theme-switch" type="button" aria-label="Switch to dark mode" aria-pressed="false"><span id="themeIcon" aria-hidden="true">☾</span><span id="themeLabel">Dark mode</span></button></div>
     </header>
     
+    <div id="inventoryView">
     <div class="filter-container">
         <label for="domainFilter" class="filter-label">Filter Target Domain:</label>
         <select id="domainFilter" class="filter-select" onchange="filterDomains()">
@@ -405,47 +448,64 @@ def generate_html(targets, takeover_findings=None):
       <div id="takeoverResults"></div>
       <div class="pager"><button id="takeoverPrev">Previous</button><span id="takeoverPages"></span><button id="takeoverNext">Next</button></div>
     </section>
-
-    <div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
-        <div class="modal" onclick="event.stopPropagation()">
-            <button class="close-btn" onclick="closeModal(event)">&times;</button>
-            <div class="modal-screenshot-frame">
-                <img id="modalImg" class="modal-img" alt="Captured screenshot" hidden>
-                <div id="modalNoScreenshot" class="no-screenshot">No screenshot available</div>
-            </div>
-            
-            <div class="detail-row">
-                <span class="detail-label">Target Domain:</span> 
-                <span class="detail-value" id="modalParentDomain"></span>
-            </div>
-            <div class="detail-row">
-                <span class="detail-label">Target URL:</span> 
-                <span class="detail-value"><a id="modalUrl" href="" target="_blank"></a></span>
-            </div>
-            <div class="detail-row">
-                <span class="detail-label">HTTP Status:</span> 
-                <span class="detail-value" id="modalStatus"></span>
-            </div>
-            <div class="detail-row">
-                <span class="detail-label">Resolved IP:</span> 
-                <span class="detail-value" id="modalIp"></span>
-            </div>
-            <div class="detail-row">
-                <span class="detail-label">Port Intelligence:</span> 
-                <span class="detail-value" id="modalPorts"></span>
-            </div>
-            <div class="detail-row">
-                <span class="detail-label">HTTPS Active:</span> 
-                <span class="detail-value" id="modalHttps"></span>
-            </div>
-            <div class="detail-row">
-                <span class="detail-label">Detected Tech:</span> 
-                <div class="detail-value" id="modalSoftware"></div>
-            </div>
-        </div>
     </div>
 
+    <section class="asset-view" id="assetView" hidden aria-label="Selected asset details">
+      <button type="button" class="asset-back" id="assetBack">← Back to assets</button>
+      <div class="asset-head">
+        <div><div class="eyebrow">Asset investigation</div><h2 id="assetTitle"></h2>
+          <p class="asset-subtitle" id="assetSubtitle"></p></div>
+        <a id="assetOpen" class="asset-open" target="_blank" rel="noopener noreferrer">↗ Open in browser</a>
+      </div>
+      <div class="asset-tabs" role="tablist" aria-label="Asset details sections">
+        <button class="asset-tab active" id="tabOverview" type="button" role="tab" aria-selected="true">Overview</button>
+        <button class="asset-tab" id="tabTechnology" type="button" role="tab" aria-selected="false">Technology</button>
+        <button class="asset-tab" id="tabDNS" type="button" role="tab" aria-selected="false">DNS findings</button>
+      </div>
+      <div id="assetOverview" role="tabpanel">
+        <div class="asset-columns">
+          <div class="asset-panel">
+            <h3>Screenshot preview</h3>
+            <div class="asset-screenshot-frame" id="assetScreenshotFrame">
+              <img id="assetImg" alt="Captured website screenshot" hidden>
+              <div id="assetNoScreenshot" class="no-screenshot">No screenshot available</div>
+            </div>
+            <div class="asset-shot-caption">Screenshot captured during this scan, when available.</div>
+          </div>
+          <div class="asset-panel"><h3>Asset details</h3><div id="assetRows"></div></div>
+        </div>
+      </div>
+      <div id="assetTechnology" class="asset-panel" role="tabpanel" hidden>
+        <h3>Detected technology</h3>
+        <p class="asset-subtitle">Observed through technology fingerprinting and available response headers.</p>
+        <div class="asset-tech-list" id="assetTechList" style="margin-top:20px"></div>
+      </div>
+      <div id="assetDNS" class="asset-panel" role="tabpanel" hidden>
+        <h3>DNS / subdomain takeover triage</h3>
+        <p class="asset-subtitle">Read-only indicators, not proof that a hostname can be claimed.</p>
+        <div id="assetDnsFindings"></div>
+      </div>
+    </section>
     <script>
+        // Persistent report-only preference; works offline and tolerates file:// storage restrictions.
+        const THEME_KEY = 'scopehound-report-theme';
+        function setTheme(theme, save) {
+            const dark = theme === 'dark';
+            document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+            document.getElementById('themeIcon').textContent = dark ? '☀' : '☾';
+            document.getElementById('themeLabel').textContent = dark ? 'Light mode' : 'Dark mode';
+            const toggle = document.getElementById('themeToggle');
+            toggle.setAttribute('aria-label', dark ? 'Switch to light mode' : 'Switch to dark mode');
+            toggle.setAttribute('aria-pressed', String(dark));
+            if (save) { try { localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light'); } catch (_) {} }
+        }
+        let initialTheme = 'light';
+        try { initialTheme = localStorage.getItem(THEME_KEY) || 'light'; } catch (_) {}
+        if (initialTheme !== 'dark' && initialTheme !== 'light') initialTheme = 'light';
+        setTheme(initialTheme, false);
+        document.getElementById('themeToggle').addEventListener('click', () => {
+            setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark', true);
+        });
         const targetsData = /* JSON_INJECTED_HERE */;
         const takeoverData = /* TAKEOVER_JSON */;
         const domainFilter = document.getElementById('domainFilter');
@@ -498,7 +558,10 @@ def generate_html(targets, takeover_findings=None):
         function renderAssetCard(target, index) {
             const card = document.createElement('div');
             card.className = 'card';
-            card.addEventListener('click', () => openModal(index));
+            card.addEventListener('click', () => openAsset(index));
+            card.tabIndex = 0; card.setAttribute('role', 'button');
+            card.setAttribute('aria-label', 'View details for ' + target.url);
+            card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openAsset(index); } });
             const screenshotFrame = makeText('div', '', 'screenshot-frame');
             const fallback = () => screenshotFrame.replaceChildren(makeText('div', 'No screenshot available', 'no-screenshot'));
             if (target.b64_img) {
@@ -593,67 +656,113 @@ def generate_html(targets, takeover_findings=None):
         document.getElementById('takeoverNext').onclick = () => { takeoverPage++; renderTakeovers(); };
         renderAssets(); renderTakeovers();
 
-        function openModal(index) {
-            const target = targetsData[index];
-            const modalImg = document.getElementById('modalImg');
-            const modalNoScreenshot = document.getElementById('modalNoScreenshot');
-            modalImg.hidden = true;
-            modalNoScreenshot.hidden = false;
-            modalImg.removeAttribute('src');
-            if (target.b64_img) {
-                modalImg.onerror = () => {
-                    modalImg.hidden = true;
-                    modalNoScreenshot.hidden = false;
-                };
-                modalImg.onload = () => {
-                    modalImg.hidden = false;
-                    modalNoScreenshot.hidden = true;
-                };
-                modalImg.src = 'data:image/jpeg;base64,' + target.b64_img;
-            }
-            document.getElementById('modalParentDomain').textContent = target.parent_domain;
-            document.getElementById('modalUrl').href = target.url;
-            document.getElementById('modalUrl').textContent = target.url;
-            
-            let statusStyle = 'background: var(--accent-amber-bg); color: var(--accent-amber); border: 1px solid rgba(245, 158, 11, 0.3);';
-            if (target.status >= 200 && target.status < 300) statusStyle = 'background: var(--accent-green-bg); color: var(--accent-green); border: 1px solid rgba(16, 185, 129, 0.3);';
-            else if (target.status >= 300 && target.status < 400) statusStyle = 'background: var(--accent-blue-bg); color: var(--accent-blue); border: 1px solid rgba(59, 130, 246, 0.3);';
-            else if (target.status >= 500 || target.status === 'Failed') statusStyle = 'background: var(--accent-red-bg); color: var(--accent-red); border: 1px solid rgba(239, 68, 68, 0.3);';
-            
-            document.getElementById('modalStatus').innerHTML = `<span class="badge" style="${statusStyle}">HTTP ${target.status || 'N/A'}</span>`;
-            document.getElementById('modalIp').textContent = target.ip;
-            
-            const portsStr = target.all_ports && target.all_ports.length ? target.all_ports.join(', ') + ' (Shodan InternetDB, not live-verified)' : 'Not available (80/443 are probe candidates, not confirmed open)';
-            document.getElementById('modalPorts').textContent = portsStr;
-            document.getElementById('modalHttps').innerHTML = target.is_https ? '🔒 Yes' : '⚠️ No';
-            
-            const modalSoftwareContainer = document.getElementById('modalSoftware');
-            modalSoftwareContainer.innerHTML = '';
-            
-            const techList = target.software ? [...new Set(target.software)] : [];
-            if (techList.length > 0) {
-                techList.forEach(t => {
-                    const pill = document.createElement('span');
-                    pill.className = 'tech-pill';
-                    pill.textContent = t;
-                    modalSoftwareContainer.appendChild(pill);
-                });
-            } else {
-                modalSoftwareContainer.innerHTML = '<span style="color: var(--text-muted)">No identifiable technology stack detected</span>';
-            }
-            
-            document.getElementById('modalOverlay').style.display = 'flex';
-            document.body.style.overflow = 'hidden';
-        }
-
-        function closeModal(e) {
-            document.getElementById('modalOverlay').style.display = 'none';
-            document.body.style.overflow = 'auto';
-        }
-        
-        document.addEventListener('keydown', (e) => {
-            if(e.key === "Escape") closeModal();
-        });
+         let activeAssetIndex = null;
+         const assetPanels = {overview:'assetOverview', technology:'assetTechnology', dns:'assetDNS'};
+         const assetTabIds = {overview:'tabOverview', technology:'tabTechnology', dns:'tabDNS'};
+         function chooseAssetTab(name) {
+             Object.keys(assetPanels).forEach(key => {
+                 document.getElementById(assetPanels[key]).hidden = key !== name;
+                 const button = document.getElementById(assetTabIds[key]);
+                 button.classList.toggle('active', key === name);
+                 button.setAttribute('aria-selected', key === name ? 'true' : 'false');
+             });
+         }
+         function addAssetRow(label, value, kind) {
+             const row = makeText('div', '', 'asset-row');
+             row.appendChild(makeText('div', label, 'asset-row-label'));
+             const v = makeText('div', '', 'asset-row-value');
+             if (kind === 'url') {
+                 const link = makeText('a', value);
+                 link.href = value; link.target = '_blank'; link.rel = 'noopener noreferrer';
+                 v.appendChild(link);
+             } else if (kind === 'tech') {
+                 const list = makeText('div', '', 'asset-tech-list');
+                 if (value.length) value.forEach(t => list.appendChild(makeText('span', t, 'tech-pill')));
+                 else list.appendChild(makeText('span', 'Not detected'));
+                 v.appendChild(list);
+             } else v.textContent = String(value);
+             row.appendChild(v);
+             document.getElementById('assetRows').appendChild(row);
+         }
+         function hostnameFor(url) {
+             try { return new URL(url).hostname.toLowerCase().replace(/\\.$/, ''); }
+             catch { return ''; }
+         }
+         function openAsset(index) {
+             const t = targetsData[index];
+             if (!t) return;
+             activeAssetIndex = index;
+             document.getElementById('inventoryView').hidden = true;
+             document.getElementById('assetView').hidden = false;
+             const hostname = hostnameFor(t.url);
+             document.getElementById('assetTitle').textContent = hostname || t.url;
+             document.getElementById('assetSubtitle').textContent = 'Web endpoint  •  ' + t.url;
+             const open = document.getElementById('assetOpen');
+             open.href = t.url;
+             document.getElementById('assetRows').replaceChildren();
+             addAssetRow('Parent domain', t.parent_domain || 'Unknown');
+             addAssetRow('Target URL', t.url, 'url');
+             addAssetRow('HTTP status', t.status == null ? 'Unknown / not captured' : String(t.status));
+             addAssetRow('Resolved IP', t.ip || 'Unknown');
+             const reported = t.port_source === 'Shodan InternetDB';
+             const allPorts = reported && Array.isArray(t.all_ports) && t.all_ports.length
+                 ? t.all_ports.join(', ') + ' (Shodan InternetDB, not live-verified)'
+                 : (reported ? 'No ports reported by InternetDB' : 'No verified port intelligence; 80/443 are probe candidates');
+             addAssetRow('Port intelligence', allPorts);
+             addAssetRow('Endpoint port', String(t.port ?? 'Unknown') + (reported ? ' (InternetDB reported)' : ' (probe candidate)'));
+             addAssetRow('HTTPS scheme', t.is_https ? 'Yes (HTTPS target)' : 'No (HTTP target)');
+             const tech = [...new Set(t.software || [])];
+             addAssetRow('Technology', tech, 'tech');
+             const techRoot = document.getElementById('assetTechList');
+             techRoot.replaceChildren();
+             if (tech.length) tech.forEach(x => techRoot.appendChild(makeText('span', x, 'tech-pill')));
+             else techRoot.appendChild(makeText('div', 'No identifiable technology detected.', 'asset-empty'));
+             const img = document.getElementById('assetImg');
+             const missing = document.getElementById('assetNoScreenshot');
+             img.onload = null; img.onerror = null; img.hidden = true;
+             missing.hidden = false; img.removeAttribute('src');
+             if (t.b64_img) {
+                 img.onload = () => { if (activeAssetIndex === index) { img.hidden = false; missing.hidden = true; } };
+                 img.onerror = () => { img.hidden = true; missing.hidden = false; };
+                 img.src = 'data:image/jpeg;base64,' + t.b64_img;
+             }
+             const dnsRoot = document.getElementById('assetDnsFindings');
+             dnsRoot.replaceChildren();
+             const findings = takeoverData.filter(f => (f.hostname || '').toLowerCase().replace(/\\.$/, '') === hostname);
+             if (!findings.length) dnsRoot.appendChild(makeText('p', 'No DNS triage result recorded for this hostname.', 'asset-empty'));
+             findings.forEach(f => {
+                 const box = makeText('div', '', '');
+                 addDnsLine(box, 'Hostname', f.hostname || hostname);
+                 addDnsLine(box, 'Triage result', f.status || 'Unknown');
+                 addDnsLine(box, 'Provider', f.provider || 'Unknown');
+                 addDnsLine(box, 'CNAME chain', (f.cname_chain || []).join(' → ') || 'None recorded');
+                 addDnsLine(box, 'Name servers', (f.ns || []).join(', ') || 'None recorded');
+                 addDnsLine(box, 'Evidence', (f.evidence || []).join('; ') || 'No indicators recorded');
+                 if (f.dig_command) addDnsLine(box, 'Suggested DNS check', f.dig_command);
+                 dnsRoot.appendChild(box);
+             });
+             chooseAssetTab('overview');
+             window.scrollTo(0, 0);
+         }
+         function addDnsLine(container, label, value) {
+             const row = makeText('div', '', 'asset-row');
+             row.appendChild(makeText('div', label, 'asset-row-label'));
+             row.appendChild(makeText('div', value, 'asset-row-value'));
+             container.appendChild(row);
+         }
+         function closeAsset() {
+             activeAssetIndex = null;
+             document.getElementById('assetView').hidden = true;
+             document.getElementById('inventoryView').hidden = false;
+             window.scrollTo(0, 0);
+         }
+         document.getElementById('assetBack').addEventListener('click', closeAsset);
+         document.getElementById('tabOverview').addEventListener('click', () => chooseAssetTab('overview'));
+         document.getElementById('tabTechnology').addEventListener('click', () => chooseAssetTab('technology'));
+         document.getElementById('tabDNS').addEventListener('click', () => chooseAssetTab('dns'));
+         document.addEventListener('keydown', e => {
+             if (e.key === 'Escape' && !document.getElementById('assetView').hidden) closeAsset();
+         });
     </script>
 </body>
 </html>"""
