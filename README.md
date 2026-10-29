@@ -1,137 +1,121 @@
 # ScopeHound
 
-**Lightweight attack-surface discovery and DNS takeover triage.**
+Lightweight Python-based attack surface discovery, technology fingerprinting, and DNS takeover triage.
 
-ScopeHound is an open-source Python scanner for building an inventory of internet-facing assets. Give it a list of parent domains, or supply your own subdomains. It combines DNS discovery, Shodan InternetDB enrichment, technology fingerprinting, screenshots, and a searchable HTML report.
-
-The codebase is intentionally small and easy to modify. Python is the primary way to run it; Docker is optional.
+ScopeHound is an open-source Python scanner for building an inventory of internet-facing assets. Provide a list of parent domains for enumeration, or skip enumeration and scan a developer-supplied list of subdomains. The tool enriches findings with Shodan InternetDB, Wappalyzer, Playwright screenshots, and DNS takeover indicators, then produces an HTML report for local review.
 
 ## Features
 
-- Subdomain discovery with [Subfinder](https://github.com/projectdiscovery/subfinder), or an existing list of hostnames
-- DNS resolution and open-port context from [Shodan InternetDB](https://internetdb.shodan.io/)
-- Web technology detection with Wappalyzer and screenshots with Playwright
-- HTTP response filters, search, pagination, and expandable results in a standalone HTML report
-- DNS CNAME/NS checks and provider error fingerprints for **potential** subdomain takeovers
-- Performs port scanning to check for critical open ports
-- Optional recurring scans with `--interval-hours`
+- Subdomain discovery with **Subfinder**
+- Support for **developer-supplied subdomain lists**
+- DNS resolution and grouping by parent domain
+- Web asset probing on common web ports
+- **Shodan InternetDB** enrichment for IP and port intelligence
+- **Wappalyzer** technology fingerprinting
+- **Playwright** screenshots for reachable web assets
+- **DNS / subdomain takeover triage** with provider fingerprints
+- Searchable HTML report with filtering, pagination, and modal asset details
+- Optional **Docker** support for local or unattended runs
 
-> **Use only on assets you own or are authorized to assess.** The scanner requests `/`, `/.git`, and `/config.json` on selected web endpoints. Reports may contain sensitive infrastructure details and screenshots. Keep them private.
+## Screenshots
 
-## Quick start (Python)
+### Dashboard overview
+![ScopeHound dashboard overview](docs/images/dashboard-overview.png)
 
-**Requirements:** Python 3.11+ and a working network connection. Install [Subfinder](https://github.com/projectdiscovery/subfinder) and make sure it is on `PATH` for automatic enumeration. If you provide your own hostname list, Subfinder is not required.
+### HTTP status filters
+![ScopeHound status filters](docs/images/status-filters.png)
+
+### Asset details
+![ScopeHound asset details](docs/images/asset-details.png)
+
+### DNS takeover triage
+![ScopeHound DNS takeover triage](docs/images/dns-triage.png)
+
+## Requirements
+
+- Python 3.10+
+- Google Chrome / Chromium (for Playwright screenshots)
+- Go-installed **Subfinder** in `PATH` if you want automatic enumeration
+
+Install Python dependencies:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
 pip install -r requirements.txt
+```
+
+Install Playwright browser support:
+
+```bash
 python -m playwright install chromium
 ```
 
-On Windows, activate the environment using `.venv\Scripts\activate`.
+## Quick start (Python)
 
-Put one authorized parent domain per line in `domains.txt`, then run:
+### 1. Create `domains.txt`
+
+```text
+example.com
+```
+
+### 2. Run ScopeHound with Subfinder
 
 ```bash
 python asm.py -f domains.txt
 ```
 
-To skip discovery and scan your own list of full hostnames (one per line):
+### 3. Or skip enumeration and use your own subdomains
 
 ```bash
-python asm.py -f domains.txt --input-subdomains my-subdomains.txt
+python asm.py -f domains.txt --input-subdomains subdomains.txt
 ```
 
-Every supplied hostname must belong to one of the parent domains in `domains.txt`.
-
-If you don't have Subfinder, you can use a DNS prefix wordlist instead:
+### 4. Legacy wordlist discovery mode
 
 ```bash
 python asm.py -f domains.txt --discovery wordlist -s subdomains.txt
 ```
 
-Reports are saved in `reports/` as self-contained HTML files. Open a report in your browser; no server is required.
+## Reports
+
+ScopeHound automatically creates a `reports/` folder and saves generated HTML scan reports there.
 
 ## Docker (optional)
 
-Build the image:
+Build:
 
 ```bash
 docker build -t scopehound .
 ```
 
-Run a scan, keeping reports on your host:
+Run:
 
 ```bash
-mkdir -p reports
-docker run --rm \
-  -v "$PWD/domains.txt:/app/domains.txt:ro" \
-  -v "$PWD/reports:/app/reports" \
-  scopehound -f domains.txt
+docker run --rm   -v "$PWD/domains.txt:/app/domains.txt:ro"   -v "$PWD/reports:/app/reports"   scopehound
 ```
 
-For an existing subdomain list, also mount the input file and pass `--input-subdomains`:
+Scheduled mode:
 
 ```bash
-docker run --rm \
-  -v "$PWD/domains.txt:/app/domains.txt:ro" \
-  -v "$PWD/my-subdomains.txt:/app/my-subdomains.txt:ro" \
-  -v "$PWD/reports:/app/reports" \
-  scopehound -f domains.txt --input-subdomains my-subdomains.txt
+docker run -d   --name scopehound   --restart unless-stopped   -v "$PWD/domains.txt:/app/domains.txt:ro"   -v "$PWD/reports:/app/reports"   scopehound --interval-hours 24
 ```
 
-## Repeating scans
+## Notes and limitations
 
-For a simple unattended loop using Python:
+- ScopeHound is a **local, read-only inventory and triage tool**. It is not an exploit framework.
+- DNS takeover findings are **indicators** only. They are not proof that a service can be claimed.
+- Port information comes from **Shodan InternetDB** when available. Fallback web targets are probe candidates, not confirmed open ports.
+- Screenshots are captured only for web targets that can be reached by Playwright.
+- Use ScopeHound only on domains and assets you own or are explicitly authorized to assess.
+- This code is not liable for personal damages.
 
-```bash
-python asm.py -f domains.txt --interval-hours 24
-```
+## Security
 
-This repeats scans while the process is running. For persistent scheduling and monitoring, use your operating system's scheduler or an external job runner.
+If you believe you have found a vulnerability in ScopeHound itself, please use GitHub private vulnerability reporting or follow the guidance in `SECURITY.md`.
 
-## Project layout
+## Maintainer
 
-| File | Purpose |
-| --- | --- |
-| `asm.py` | CLI, discovery, enrichment, screenshots, HTML report, scan loop |
-| `takeover.py` | Read-only DNS and provider-fingerprint takeover triage |
-| `domains.txt` | Example authorized parent-domain input |
-| `subdomains.txt` | Optional wordlist for DNS-prefix discovery |
-| `tests/` | Input validation and detection tests |
-| `Dockerfile` | Optional container build |
-
-## Sample Screenshot
-**Dashboard**
-![Dashboard](./docs/images/Dashboard.png)
-**Dashboard-Alternate**
-![Dashboard](./docs/images/Dashboard-alternate.png)
-**Subdomain-Takeover-Triage**
-![Dashboard](./docs/images/Subdomain-Takeover-Triage.png)
-**FingerPrinting**
-![Dashboard](./docs/images/Fingerprinting.png)
-
-
-## Development
-
-Run the tests:
-
-```bash
-python -m unittest discover -s tests -v
-```
-
-Small improvements and integrations are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## Detection limits
-
-Takeover findings indicate **potential misconfiguration**, not confirmed exploitability. A CNAME pointing to an unavailable service, a provider error page, or an HTTP 404 does not by itself establish that a domain can be claimed. DNS information, service fingerprints, and InternetDB results may be incomplete or stale. Verify findings before taking action.
-
-## Runtime Limitation
-Depending on your lists, Runtime can vary. If youre planning to run this on a scheduled automation. It might be best to test around your operating hours
-
-## Note from Maintainer
-As much as I want to further enhance this with Authentication and add a DevOps pipeline for gitactions to instantly host and deploy. I currently do not have the time capacity but I am willing to talk with your ideas if you are interested!
+- **Mateo Carbon** — johnmatthew.carbon@gmail.com
 
 ## License
-MIT. See [LICENSE](LICENSE).
+
+Released under the **MIT License**. See `LICENSE` for details.
