@@ -108,7 +108,7 @@ This repeats scans while the process is running. For persistent scheduling and m
 **Dashboard-Alternate**
 ![Dashboard](./docs/images/Dashboard-alternate.png)
 **Subdomain-Takeover-Triage**
-![Dashboard](./docs/images/Subdomain-Takeover-Triage)
+![Dashboard](./docs/images/Subdomain-Takeover-Triage.png)
 **FingerPrinting**
 ![Dashboard](./docs/images/Fingerprinting.png)
 
