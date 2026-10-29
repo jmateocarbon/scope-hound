@@ -13,6 +13,7 @@ from playwright.async_api import async_playwright
 from wappalyzer import Wappalyzer
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlsplit
 from takeover import scan_takeovers
 
 # --- CONFIGURATION ---
@@ -24,7 +25,6 @@ MAX_CONCURRENT_TABS = 5
 PATHS_TO_CHECK = ["/", "/.git", "/config.json"]
 WEB_PORTS = [80, 81, 443, 8000, 8080, 8443]
 
-# Sample subdomains for fallback
 FALLBACK_SUBDOMAINS = [
     "www", "api", "dev", "staging", "test", "admin", 
     "portal", "vpn", "secure", "app", "shop", "store", 
@@ -33,6 +33,7 @@ FALLBACK_SUBDOMAINS = [
 ]
 
 
+# --- FILE LOADERS ---
 def load_targets(target_input: str) -> list[str]:
     """Reads target domains from a file or string and normalizes them to base apex domains."""
     raw_targets = []
@@ -191,14 +192,49 @@ def run_wappalyzer_scan(urls):
         print(f"[-] Wappalyzer scan error: {e}")
         return {}
 
+def is_allowed_browser_url(url: str, expected_host: str) -> bool:
+    """Restrict browser network traffic to the exact scanned hostname."""
+    try:
+        parsed = urlsplit(url)
+        # data and blob resources may be generated locally by the scanned page.
+        if parsed.scheme in ("data", "blob", "about"):
+            return True
+        return (parsed.scheme in ("http", "https")
+                and parsed.hostname is not None
+                and parsed.hostname.lower().rstrip(".") == expected_host.lower().rstrip("."))
+    except (ValueError, AttributeError):
+        return False
+
+
 async def process_target_screenshot(context, target, semaphore):
     async with semaphore:
         page = None
+        expected_host = urlsplit(target['url']).hostname
+        blocked_redirect = False
         try:
+            if not expected_host:
+                raise ValueError("Target URL has no hostname")
             page = await context.new_page()
+
+            async def guard_request(route):
+                nonlocal blocked_redirect
+                url = route.request.url
+                if is_allowed_browser_url(url, expected_host):
+                    await route.continue_()
+                else:
+                    if route.request.is_navigation_request() and route.request.frame == page.main_frame:
+                        blocked_redirect = True
+                        print(f"[!] Blocked out-of-scope navigation: {target['url']} -> {url}")
+                    await route.abort()
+
+            await page.route("**/*", guard_request)
             response = await page.goto(target['url'], timeout=20000, wait_until="domcontentloaded")
             await page.wait_for_timeout(2000)
-            
+            if blocked_redirect or not is_allowed_browser_url(page.url, expected_host):
+                target['status'] = "Blocked redirect"
+                target['b64_img'] = None
+                return
+
             if response:
                 target['status'] = response.status
                 headers = response.headers
@@ -212,7 +248,7 @@ async def process_target_screenshot(context, target, semaphore):
         except Exception as e:
             print(f"[-] Playwright error for {target['url']}: {str(e).splitlines()[0]}")
             target['b64_img'] = None
-            target['status'] = "Failed"
+            target['status'] = "Blocked redirect" if blocked_redirect else "Failed"
         finally:
             if page:
                 await page.close()
