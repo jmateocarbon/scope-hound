@@ -1,0 +1,4 @@
+playwright>=1.40.0
+requests>=2.31.0
+wappalyzer>=0.2.2
+dnspython>=2.6.1

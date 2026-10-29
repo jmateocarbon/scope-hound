@@ -1,0 +1,4 @@
+# Prefixes used with --discovery wordlist
+www
+api
+staging

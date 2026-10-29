@@ -1,0 +1,3 @@
+# Only scan assets you own or are authorized to assess.
+example.com
+loading.com

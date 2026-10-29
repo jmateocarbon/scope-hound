@@ -1,0 +1,15 @@
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+reports/
+scan_report_*.html
+live_results.txt
+subfinder_results.txt
+subdomain_list.txt
+subdomain_enumeration
+*.log
