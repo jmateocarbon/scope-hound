@@ -21,7 +21,7 @@ ScopeHound does not include user accounts, built-in authentication, or a hosted 
 - **Playwright** screenshots for reachable web assets
 - **DNS / subdomain takeover triage** with provider fingerprints
 - Searchable HTML report with filtering, pagination, and dedicated asset details
-- Optional **Docker** support for local or unattended runs
+- **Docker** support for local or unattended runs and GitHub Container Registry (GHCR) publishing from `main`
 - Optional compact **AI-ready JSON** export (manual upload or bring-your-own agent)
 - Optional separate **sensitive-path status checks**
 
@@ -161,7 +161,9 @@ ScopeHound uses **one scan job and one combined report**, with separate internal
 
 ### How long will a scan take?
 
-There is **no fixed runtime per domain**. One parent domain can produce hundreds of subdomains, while another may produce only a few. The important workload measures are:
+**Scan runtime depends on the domains being assessed and the compute resources available.** A short domain list is not necessarily a quick scan: one parent domain can expose hundreds of subdomains, while another may expose only a few. CPU capacity, available RAM, storage performance, Docker resource limits, network bandwidth and latency, DNS response times, and remote service timeouts all influence total duration. Increasing `--parallel-domains` may improve discovery throughput on a capable machine, but it also increases resource demand and is not a guaranteed speedup.
+
+The most useful workload measures are:
 
 - **Parent domains:** lines in `domains.txt` (the work queue).
 - **Discovered hostnames:** total subdomains found or explicitly supplied (DNS workload).
@@ -196,7 +198,7 @@ python asm.py -f domains.txt --parallel-domains auto --json --interval-hours 1
 
 ## Complete CLI reference (v0.2.0)
 
-Run `python asm.py --help` locally or `docker run --rm scopehound:0.2.0 --help` inside Docker to inspect the arguments supported by your installed version.
+Run `python asm.py --help` locally or `docker run --rm ghcr.io/jmateocarbon/scope-hound:main --help` inside Docker (once published) to inspect the arguments supported by your installed version.
 
 | Option | Default | Purpose |
 | --- | --- | --- |
@@ -270,23 +272,47 @@ example.net
 
 One domain failing does not stop other domain tasks. Review errors and the failure summary before treating the reports as complete. Scan time is driven by discovered hostnames, unique IPs, reachable web origins, DNS/network delays and screenshot timeouts—not merely the number of lines in `domains.txt`.
 
-## Docker: complete usage guide
+## Docker and GitHub Container Registry (GHCR)
 
-ScopeHound is a **CLI container**, not a hosted web UI. Docker starts the single `asm.py` entrypoint, which coordinates discovery, DNS triage, optional exposure checks and reporting. No port publication (`-p`) or database is required. There is **no published official registry image assumed** in the commands below; build from your local checkout unless a project maintainer has released a verified image.
+ScopeHound runs as a **CLI container**, not a hosted web interface. It has one `asm.py` entrypoint and needs no exposed ports (`-p`), database, or built-in AI service.
 
-### 1. Build and verify locally
+### Container publishing: merged changes on `main`
 
-Run from the repository directory containing `Dockerfile` and `requirements.txt`:
+The repository's `.github/workflows/publish-ghcr.yml` is configured to run on **every push to `main`**, including commits created by merging pull requests. It runs Python compilation and unit tests first; only after those pass does it build and publish the Docker image to GitHub Container Registry. `workflow_dispatch` also supports manual runs.
+
+| GHCR reference | Meaning | Intended use |
+| --- | --- | --- |
+| `ghcr.io/jmateocarbon/scope-hound:main` | Most recent **successfully published** `main` image; changes on subsequent successful builds | Development/current mainline scanning |
+| `ghcr.io/jmateocarbon/scope-hound:sha-<short-commit>` | Image for one commit (short commit-derived tag) | Identify and reproduce a specific successful pipeline build |
+| `ghcr.io/jmateocarbon/scope-hound@sha256:<digest>` | Exact immutable image artifact | Strongest reproducibility for deployment |
+| `ghcr.io/jmateocarbon/scope-hound:0.2.0` | **Only if separately published** as an intentional release | Stable versioned release; *not* created by the current `main` workflow |
+
+**Availability:** These references are publishing conventions, not a claim that the image already exists. The package must be published successfully and made **Public** in GitHub Packages before unauthenticated users can pull it. See the repository's **Actions** tab and package page to confirm availability. The current workflow builds **Linux AMD64**, not ARM64.
+
+The workflow publishes on *any push* to `main`, not exclusively on PR merges. Protect `main` with required reviews and status checks if you want publication to happen only after reviewed changes. A `main` tag and short-SHA tag can be overwritten by a sufficiently privileged publisher; use the returned full digest for immutable deployment.
+
+### 1. Pull the published `main` image
+
+Once the GHCR package is publicly available:
 
 ```bash
-docker build --progress=plain -t scopehound:0.2.0 .
-docker run --rm --entrypoint subfinder scopehound:0.2.0 -version
-docker run --rm scopehound:0.2.0 --help
+docker pull ghcr.io/jmateocarbon/scope-hound:main
+docker run --rm ghcr.io/jmateocarbon/scope-hound:main --help
+docker run --rm --entrypoint subfinder ghcr.io/jmateocarbon/scope-hound:main -version
 ```
 
-Docker's build stage needs a **Go version compatible with the pinned Subfinder release**. Avoid `go install ...@latest`; use a tested, explicitly pinned Subfinder version and a compatible Go builder. If a Go installation step fails, inspect the first relevant `go:` error in `docker build --progress=plain` output. Base-image digests and dependency locks should be reviewed separately before claiming a fully reproducible build.
+If you prefer to build locally or GHCR has not been published yet:
 
-### 2. One-time scan — Linux/macOS Bash
+```bash
+docker build --progress=plain -t scopehound:local .
+docker run --rm scopehound:local --help
+```
+
+The Docker build stage needs a Go version compatible with the pinned Subfinder release. Avoid `go install ...@latest`; pin and test your Go builder, Subfinder, and Python dependencies. Image digests alone do not pin packages installed during build.
+
+### 2. Run with Docker — Linux/macOS Bash
+
+Run from a directory containing an authorized `domains.txt` file:
 
 ```bash
 mkdir -p reports
@@ -294,10 +320,10 @@ mkdir -p reports
 docker run --rm \
   -v "$PWD/domains.txt:/app/domains.txt:ro" \
   -v "$PWD/reports:/app/reports" \
-  scopehound:0.2.0 --json --parallel-domains auto
+  ghcr.io/jmateocarbon/scope-hound:main --json --parallel-domains auto
 ```
 
-### 3. One-time scan — Windows PowerShell
+### 3. Run with Docker — Windows PowerShell
 
 ```powershell
 New-Item -ItemType Directory -Force reports | Out-Null
@@ -305,48 +331,48 @@ New-Item -ItemType Directory -Force reports | Out-Null
 docker run --rm `
   -v "${PWD}/domains.txt:/app/domains.txt:ro" `
   -v "${PWD}/reports:/app/reports" `
-  scopehound:0.2.0 --json --parallel-domains auto
+  ghcr.io/jmateocarbon/scope-hound:main --json --parallel-domains auto
 ```
 
-Both commands generate one combined HTML report and one optional compact JSON report in your **host's** `reports/` directory. The bind mount preserves reports when the container exits.
+Both commands write the combined HTML report and optional screenshot-free AI JSON into your **host's** `reports/` folder. You can replace the image reference with `scopehound:local` for your locally built image, or use an exact `@sha256:` reference for a pinned deployment.
 
-### 4. Run with additional options
+### 4. Optional flags and custom input mounts
 
-The command arguments go **after the image name**, just as with `python asm.py`:
+CLI flags always go **after the image name**, just as with `python asm.py`:
 
 ```bash
-# Enable path exposure checks using the default list baked into the image
+# Optional exposure checks; default dangerous_paths.txt is inside the image
 docker run --rm \
   -v "$PWD/domains.txt:/app/domains.txt:ro" \
   -v "$PWD/reports:/app/reports" \
-  scopehound:0.2.0 --json --check-exposures --parallel-domains 4
+  ghcr.io/jmateocarbon/scope-hound:main --json --check-exposures
 
-# Use an externally maintained path list; mount the file before referencing it
+# Custom dangerous-path list must be mounted into the container
 docker run --rm \
   -v "$PWD/domains.txt:/app/domains.txt:ro" \
   -v "$PWD/my_paths.txt:/app/my_paths.txt:ro" \
   -v "$PWD/reports:/app/reports" \
-  scopehound:0.2.0 --check-exposures --paths my_paths.txt --json
+  ghcr.io/jmateocarbon/scope-hound:main --check-exposures --paths my_paths.txt --json
 
-# Scan an exact list of scoped subdomains, skipping Subfinder
+# Skip Subfinder by supplying exact, in-scope hostnames
 docker run --rm \
   -v "$PWD/domains.txt:/app/domains.txt:ro" \
   -v "$PWD/subdomains.txt:/app/subdomains.txt:ro" \
   -v "$PWD/reports:/app/reports" \
-  scopehound:0.2.0 --input-subdomains subdomains.txt --json
+  ghcr.io/jmateocarbon/scope-hound:main --input-subdomains subdomains.txt --json
 
-# Enable 8080/8443 where these ports are present in port intelligence
+# Optional alternate web ports only when supported by port intelligence
 docker run --rm \
   -v "$PWD/domains.txt:/app/domains.txt:ro" \
   -v "$PWD/reports:/app/reports" \
-  scopehound:0.2.0 --extra-web-ports 8080,8443 --json
+  ghcr.io/jmateocarbon/scope-hound:main --extra-web-ports 8080,8443 --json
 ```
 
-For **Windows PowerShell**, use the volume-mount style shown in step 3, and replace Bash's line-continuation `\` with a PowerShell backtick (`` ` ``). If a source file has a different name, mount it to a matching path in `/app/` and provide that filename in the CLI option.
+For Windows PowerShell, use the mount pattern in step 3 and replace Bash's `\` line continuation with a PowerShell backtick. See [Complete CLI reference](#complete-cli-reference-v020) for every supported flag.
 
-### 5. Scheduled Docker scanning
+### 5. Scheduled Docker scans
 
-After verifying a one-off scan, launch a single long-running container:
+After verifying a one-off run, start a single long-running container:
 
 ```bash
 mkdir -p reports
@@ -356,31 +382,33 @@ docker run -d \
   --restart unless-stopped \
   -v "$PWD/domains.txt:/app/domains.txt:ro" \
   -v "$PWD/reports:/app/reports" \
-  scopehound:0.2.0 --json --parallel-domains auto --interval-hours 24
+  ghcr.io/jmateocarbon/scope-hound:main --json --parallel-domains auto --interval-hours 24
 ```
 
 ```bash
-# Inspect and stop the scheduled container
 docker logs -f scopehound
 docker stop scopehound
 docker rm scopehound
 ```
 
-`--interval-hours 24` means a scan starts no more frequently than every 24 hours **within that one process**. If the scan takes longer than the interval, the next starts after it finishes; ScopeHound does not overlap scan cycles inside the same container. However, separately launched containers can overlap and write to the same reports directory, so avoid duplicate runners. Scan reports are not automatically pruned; monitor storage and implement your own retention policy if scheduling regularly.
+**Important:** An existing container does **not** automatically switch to a new image when `:main` is updated. Pull the new image and recreate the container to adopt a later build. For stable unattended schedules, pin an image digest rather than a moving `:main` tag.
 
-### 6. Docker troubleshooting
+`--interval-hours 24` starts new scan cycles no more frequently than every 24 hours in that process. A slow scan can push the next start later, and scan cycles in one process do not overlap. Separately launched containers can still overlap, however. Reports are **not automatically pruned**; monitor storage and manage retention outside ScopeHound if you schedule regular runs.
+
+### 6. Docker / GHCR troubleshooting
 
 | Symptom | What to check |
 | --- | --- |
-| `go install ... subfinder@latest` fails during build | Replace floating `@latest` with a tested Subfinder version and compatible Go builder; use `--progress=plain` to see the underlying error. |
-| `domains.txt` missing / path not found | Run from the correct directory; check the host path and the read-only bind mount. |
-| `subdomains.txt` or custom paths file not found | Mount the file into `/app/` and pass its container filename. |
-| No reports visible on the host | Check the `/app/reports` bind mount and host-folder write permissions. |
-| Browser launch or screenshot failures | Confirm Playwright Chromium installed successfully in the image and inspect `docker logs`/terminal output. |
-| Scan is slower than expected | Compare discovered host counts and unique origins; default to ports 80/443, leave optional paths off unless required, and tune `--parallel-domains` conservatively. |
-| A few targets failed | Review the terminal and `domain_failures_*.json` if produced; isolated web endpoint failures do not necessarily mean the entire scan failed. |
+| `manifest unknown` or `not found` pulling `:main` | Check that the publish workflow succeeded, the image reference matches the repository, and the GHCR package has been made Public; otherwise use a local build. |
+| `denied` / `unauthorized` pulling from GHCR | The package may be private; review visibility and authentication. |
+| `go install ... subfinder@latest` fails | Use the tested pinned Subfinder release and compatible Go builder; inspect `docker build --progress=plain`. |
+| Missing `domains.txt`, `subdomains.txt`, or custom paths | Confirm host files exist and are mounted to the filenames used by the CLI arguments. |
+| No reports on the host | Verify `/app/reports` bind mount and host directory write permissions. |
+| Chromium or screenshots fail | Inspect container logs; confirm Playwright Chromium was installed correctly at build time. |
+| Scan is slow | Check host counts and page timeouts, stay with 80/443 by default, and tune `--parallel-domains` conservatively. |
+| A few targets fail | Check scan logs and `domain_failures_*.json` when present. Individual web endpoint failures need not indicate a failed domain scan. |
 
-**Security:** Run only against domains you own or have explicit permission to assess. Keep report directories private because asset inventories and sensitive-path status results may reveal internal infrastructure.
+**Security:** Assess only domains you own or are explicitly authorized to scan. Keep reports private because inventories and path-check statuses may contain sensitive infrastructure information.
 
 ## Reports
 
@@ -409,7 +437,7 @@ python -m unittest discover -s tests -v
 python -m compileall -q asm.py takeover.py tests
 ```
 
-Before tagging `v0.2.0`, build and smoke-test the Docker image against a domain you control. Validate output files, browser screenshots, alternate port behavior, and Docker volume permissions. The unit suite uses mocks and does not establish that Docker or live scanning works in every environment.
+Before publishing a versioned release, build and smoke-test the Docker image against a domain you control. Validate output files, browser screenshots, alternate port behavior, and Docker volume permissions. The unit suite uses mocks and does not establish that Docker or live scanning works in every environment.
 
 ## Deployment and Access Control
 
