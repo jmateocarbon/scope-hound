@@ -951,7 +951,7 @@ def generate_html(targets, takeover_findings=None):
     
     # Pin the exact inline script in a CSP to prevent injected HTML from executing.
     import hashlib
-    script_match = re.search(r'<script>(.*?)</script>', html_content, re.DOTALL)
+    script_match = re.search(r'<script\b[^>]*>(.*?)</script(?:\s+[^>]*)?\s*>', html_content, re.DOTALL | re.IGNORECASE)
     if script_match is None:
         raise ValueError('Report inline script missing')
     js_hash = base64.b64encode(hashlib.sha256(script_match.group(1).encode('utf-8')).digest()).decode('ascii')
