@@ -20,7 +20,7 @@ ScopeHound does not include user accounts, built-in authentication, or a hosted 
 - **Wappalyzer** technology fingerprinting
 - **Playwright** screenshots for reachable web assets
 - **DNS / subdomain takeover triage** with provider fingerprints
-- Searchable HTML report with filtering, pagination, and modal asset details
+- Searchable HTML report with filtering, pagination, and dedicated asset details
 - Optional **Docker** support for local or unattended runs
 
 ## Screenshots
@@ -81,9 +81,27 @@ python asm.py -f domains.txt --input-subdomains subdomains.txt
 python asm.py -f domains.txt --discovery wordlist -s subdomains.txt
 ```
 
+### Optional sensitive-path checks
+
+By default, ScopeHound visits **only `/`** for web fingerprinting and screenshots. This avoids running the browser and Wappalyzer against sensitive-path candidates.
+
+To run separate status-only HTTP checks using `dangerous_paths.txt`:
+
+```bash
+python asm.py -f domains.txt --check-exposures
+```
+
+To use another root-relative path file (one path per line):
+
+```bash
+python asm.py -f domains.txt --check-exposures --paths my_paths.txt
+```
+
+This module does **not** run screenshots or Wappalyzer on these paths, follow HTTP redirects, or store response bodies. It writes results to `reports/exposure_checks_<timestamp>.json`, separate from the HTML dashboard. A `200` response means **needs review**, not confirmed sensitive-data exposure; catch-all application routing can return `200` for nonexistent paths. Keep path lists small and only scan authorized assets.
+
 ## Reports
 
-ScopeHound automatically creates a `reports/` folder and saves generated HTML scan reports there.
+ScopeHound automatically creates a `reports/` folder and saves generated HTML scan reports there. Optional exposure-check JSON files are also saved there.
 
 ## Docker (optional)
 

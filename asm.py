@@ -11,7 +11,8 @@ import re
 import requests
 from playwright.async_api import async_playwright
 from wappalyzer import Wappalyzer
-from datetime import datetime
+from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import urlsplit
 from takeover import scan_takeovers
@@ -22,7 +23,10 @@ DEFAULT_TARGET_FILE = "domains.txt"
 DEFAULT_SUBDOMAINS_FILE = "subdomains.txt"
 MAX_CONCURRENT_TABS = 5
 
-PATHS_TO_CHECK = ["/", "/.git", "/config.json"]
+PATHS_TO_CHECK = ["/"]  # Browser, fingerprint, and screenshot only the root page.
+DEFAULT_EXPOSURE_PATHS = "dangerous_paths.txt"
+MAX_EXPOSURE_WORKERS = 8
+MAX_EXPOSURE_PATHS = 50
 WEB_PORTS = [80, 81, 443, 8000, 8080, 8443]
 
 FALLBACK_SUBDOMAINS = [
@@ -141,6 +145,84 @@ async def resolve_hosts(hosts: list[str]) -> dict[str, set[str]]:
         for ip in ips:
             ip_to_hosts.setdefault(ip, set()).add(host)
     return ip_to_hosts
+
+
+# --- OPTIONAL READ-ONLY EXPOSURE CHECKS (NO BROWSER / NO HTML) ---
+def load_exposure_paths(filename: str) -> list[str]:
+    """Accept only literal root-relative paths; never complete URLs or redirects."""
+    source = Path(filename)
+    if not source.is_file():
+        fallback = Path(SCRIPT_DIR) / filename
+        source = fallback if fallback.is_file() else source
+    if not source.is_file():
+        raise ValueError(f"Exposure path file not found: {filename}")
+    result = []
+    for number, line in enumerate(source.read_text(encoding="utf-8").splitlines(), 1):
+        path = line.strip()
+        if not path or path.startswith("#"):
+            continue
+        # No external origins, encoded bypasses, fragments, query parameters or traversal.
+        if (not path.startswith("/") or path.startswith("//") or
+                any(x in path for x in ("\\", "%", "?", "#", "\x00", "\r", "\n")) or
+                any(segment in (".", "..") for segment in path.split("/")) or
+                any(ord(c) < 32 or ord(c) > 126 for c in path) or len(path) > 180):
+            raise ValueError(f"Invalid root-relative path on line {number}: {path!r}")
+        if path not in result:
+            result.append(path)
+        if len(result) > MAX_EXPOSURE_PATHS:
+            raise ValueError(f"Exposure path list exceeds {MAX_EXPOSURE_PATHS} entries")
+    if not result:
+        raise ValueError("Exposure path list has no usable paths")
+    return result
+
+
+def probe_exposure(base_url: str, path: str) -> dict:
+    """Status-only GET: no redirects and no response bodies stored or parsed."""
+    url = base_url.rstrip("/") + path
+    record = {"url": url, "status": None, "assessment": "Unreachable"}
+    try:
+        # Explicitly disable environment proxy configuration for this optional checker.
+        with requests.Session() as session:
+            session.trust_env = False
+            with session.get(url, timeout=(3, 5), allow_redirects=False,
+                             stream=True, headers={"User-Agent": "ScopeHound/ExposureCheck"}) as response:
+                record["status"] = response.status_code
+                if response.status_code == 200:
+                    record["assessment"] = "Needs review (HTTP 200; not proof of exposure)"
+                elif response.status_code in (401, 403):
+                    record["assessment"] = "Access restricted"
+                elif response.status_code in (404, 410):
+                    record["assessment"] = "Not found"
+                elif 300 <= response.status_code < 400:
+                    record["assessment"] = "Redirect (not followed)"
+                else:
+                    record["assessment"] = "Other response"
+    except requests.RequestException:
+        pass
+    return record
+
+
+def run_exposure_checks(targets: list[dict], paths: list[str]) -> list[dict]:
+    # Deduplicate target origins; never accept origins from the path file.
+    bases = sorted({f"{urlsplit(t['url']).scheme}://{urlsplit(t['url']).netloc}"
+                    for t in targets if t.get("url") and
+                    urlsplit(t["url"]).scheme in ("http", "https")})
+    with ThreadPoolExecutor(max_workers=MAX_EXPOSURE_WORKERS) as pool:
+        results = list(pool.map(lambda pair: probe_exposure(*pair),
+                                ((base, path) for base in bases for path in paths)))
+    return sorted(results, key=lambda record: record["url"])
+
+
+def write_exposure_report(results: list[dict]) -> Path:
+    report_dir = Path(SCRIPT_DIR) / "reports"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    path = report_dir / f"exposure_checks_{stamp}.json"
+    content = {"schema_version": "1.0", "generated_at": datetime.now(timezone.utc).isoformat(),
+               "disclaimer": "Read-only status checks; HTTP 200 is not evidence of sensitive disclosure.",
+               "checks": results}
+    path.write_text(json.dumps(content, indent=2), encoding="utf-8")
+    return path
 
 
 # --- 1. RECON & DISCOVERY ---
@@ -791,9 +873,19 @@ async def main():
                         help='Discovery engine when no custom input is supplied (default: subfinder).')
     parser.add_argument('-s', '--subdomains', default=DEFAULT_SUBDOMAINS_FILE,
                         help='Prefix wordlist for --discovery wordlist (legacy option).')
+    parser.add_argument('--check-exposures', action='store_true',
+                        help='Run optional status-only sensitive-path checks, saved separately as JSON.')
+    parser.add_argument('--paths', default=DEFAULT_EXPOSURE_PATHS, metavar='FILE',
+                        help='Root-relative exposure paths (default: dangerous_paths.txt).')
     parser.add_argument('--interval-hours', type=float, default=0, metavar='HOURS',
                         help='Run scans repeatedly every HOURS (for unattended Docker deployments).')
     args = parser.parse_args()
+    if args.paths != DEFAULT_EXPOSURE_PATHS and not args.check_exposures:
+        parser.error('--paths requires --check-exposures')
+    try:
+        args.exposure_paths = load_exposure_paths(args.paths) if args.check_exposures else []
+    except ValueError as exc:
+        parser.error(str(exc))
     if args.interval_hours < 0:
         parser.error('--interval-hours must be nonnegative')
     if not os.path.isfile(args.domains):
@@ -898,6 +990,13 @@ async def run_scan(domains, supplied_hosts, subdomains_wordlist, args):
         print('[*] No active web targets. Generating DNS-only report.')
         results = []
     generate_html(results, findings)
+    if args.check_exposures and all_web_targets:
+        print(f"[*] Running {len(args.exposure_paths)} optional HTTP-only path check(s) per origin...")
+        exposure_results = await asyncio.to_thread(run_exposure_checks, all_web_targets, args.exposure_paths)
+        exposure_file = write_exposure_report(exposure_results)
+        print(f"[+] Exposure check results saved to: {exposure_file}")
+    elif args.check_exposures:
+        print('[*] No web origins available for optional exposure checks.')
 
 
 if __name__ == "__main__":
