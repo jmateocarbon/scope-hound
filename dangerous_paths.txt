@@ -1,0 +1,8 @@
+# Optional ScopeHound exposure indicators — root-relative paths only.
+# Run only on targets you own or are authorized to test.
+/.git/HEAD
+/config.json
+/.env
+/backup.zip
+/wp-admin
+

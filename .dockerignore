@@ -1,5 +1,5 @@
 .git
-.venv
+.venv*
 __pycache__
 reports
 .env
@@ -7,3 +7,4 @@ reports
 *.pyc
 *.log
 tests
+.DS_Store
