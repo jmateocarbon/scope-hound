@@ -39,7 +39,7 @@ class JSONExportTests(unittest.TestCase):
             asm.generate_html([{'url':'https://example.com/', 'parent_domain':'example.com', 'ip':'1.2.3.4', 'status': 200, 'port':443,'software':['</script><script>alert(1)</script>'], 'b64_img':None}], [])
             reports = list((Path(d)/'reports').glob('*.html'))
             self.assertEqual(len(reports),1)
-            body = reports[0].read_text()
+            body = reports[0].read_text(encoding="utf-8")
             self.assertIn('Content-Security-Policy', body)
             self.assertNotIn('</script><script>alert(1)</script>', body)
 if __name__ == '__main__': unittest.main()
