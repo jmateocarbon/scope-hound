@@ -601,7 +601,7 @@ def generate_html(targets, takeover_findings=None):
     <div id="inventoryView">
     <div class="filter-container">
         <label for="domainFilter" class="filter-label">Filter Target Domain:</label>
-        <select id="domainFilter" class="filter-select" onchange="filterDomains()">
+        <select id="domainFilter" class="filter-select">
             <option value="ALL">All Domains</option>
         </select>
     </div>
@@ -821,6 +821,7 @@ def generate_html(targets, takeover_findings=None):
             document.getElementById('takeoverNext').disabled = takeoverPage >= pages - 1;
         }
         function filterDomains() { assetPage = 0; takeoverPage = 0; renderAssets(); renderTakeovers(); }
+        domainFilter.addEventListener('change', filterDomains);
         document.getElementById('searchInput').addEventListener('input', () => { assetPage = 0; renderAssets(); });
         document.getElementById('takeoverSearch').addEventListener('input', () => { takeoverPage = 0; renderTakeovers(); });
         document.getElementById('pageSize').addEventListener('change', () => { assetPage = 0; renderAssets(); });
@@ -951,7 +952,7 @@ def generate_html(targets, takeover_findings=None):
     
     # Pin the exact inline script in a CSP to prevent injected HTML from executing.
     import hashlib
-    script_match = re.search(r'<script\b[^>]*>(.*?)</script(?:\s+[^>]*)?\s*>', html_content, re.DOTALL | re.IGNORECASE)
+    script_match = re.search(r'<script>(.*?)</script>', html_content, re.DOTALL)
     if script_match is None:
         raise ValueError('Report inline script missing')
     js_hash = base64.b64encode(hashlib.sha256(script_match.group(1).encode('utf-8')).digest()).decode('ascii')
