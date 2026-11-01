@@ -1,8 +1,25 @@
 # ScopeHound
-
 Lightweight Python-based attack surface discovery, technology fingerprinting, and DNS takeover triage.
 
 ScopeHound is an open-source Python scanner for building an inventory of internet-facing assets. Provide a list of parent domains for enumeration, or skip enumeration and scan a developer-supplied list of subdomains. The tool enriches findings with Shodan InternetDB, Wappalyzer, Playwright screenshots, and DNS takeover indicators, then produces an HTML report for local review.
+
+## Table of Contents
+
+- [Project Philosophy](#project-philosophy)
+- [Features](#features)
+- [Screenshots](#screenshots)
+- [Requirements](#requirements)
+- [Quick start (Python)](#quick-start-python)
+- [Parallel domain scanning and runtime (v0.2.0)](#parallel-domain-scanning-and-runtime-v020)
+- [Complete CLI reference (v0.2.0)](#complete-cli-reference-v020)
+- [Docker and GitHub Container Registry (GHCR)](#docker-and-github-container-registry-ghcr)
+- [Reports](#reports)
+- [Tests and release verification](#tests-and-release-verification)
+- [Deployment and Access Control](#deployment-and-access-control)
+- [Notes and limitations](#notes-and-limitations)
+- [Security](#security)
+- [Maintainer](#maintainer)
+- [License](#license)
 
 ## Project Philosophy
 
@@ -289,6 +306,8 @@ The repository's `.github/workflows/publish-ghcr.yml` is configured to run on **
 
 **Availability:** These references are publishing conventions, not a claim that the image already exists. The package must be published successfully and made **Public** in GitHub Packages before unauthenticated users can pull it. See the repository's **Actions** tab and package page to confirm availability. The current workflow builds **Linux AMD64**, not ARM64.
 
+**Platform support:** The current published `:main` image is built for **Linux AMD64**. On Apple Silicon Macs (Linux ARM64), a normal pull may fail with `no matching manifest for linux/arm64/v8`. Use the AMD64 emulation workaround below while a native ARM64 build is being evaluated. A multi-architecture image should only be advertised once both variants and Playwright/Chromium have been tested.
+
 The workflow publishes on *any push* to `main`, not exclusively on PR merges. Protect `main` with required reviews and status checks if you want publication to happen only after reviewed changes. A `main` tag and short-SHA tag can be overwritten by a sufficiently privileged publisher; use the returned full digest for immutable deployment.
 
 ### 1. Pull the published `main` image
@@ -309,6 +328,43 @@ docker run --rm scopehound:local --help
 ```
 
 The Docker build stage needs a Go version compatible with the pinned Subfinder release. Avoid `go install ...@latest`; pin and test your Go builder, Subfinder, and Python dependencies. Image digests alone do not pin packages installed during build.
+
+### Apple Silicon (ARM64) compatibility
+
+The current GHCR `:main` image is published for **`linux/amd64`**. Apple Silicon Macs normally request `linux/arm64/v8`, so a pull without an architecture override can return:
+
+```text
+no matching manifest for linux/arm64/v8 in the manifest list entries
+```
+
+Until a native ARM64 image has been built and validated, explicitly use the AMD64 image under Docker Desktop emulation:
+
+```bash
+docker pull --platform linux/amd64 ghcr.io/jmateocarbon/scope-hound:main
+
+docker run --rm --platform linux/amd64 \
+  --entrypoint subfinder \
+  ghcr.io/jmateocarbon/scope-hound:main -version
+```
+
+For a full scan on Apple Silicon:
+
+```bash
+mkdir -p reports
+
+docker run --rm --platform linux/amd64 \
+  -v "$PWD/domains.txt:/app/domains.txt:ro" \
+  -v "$PWD/reports:/app/reports" \
+  ghcr.io/jmateocarbon/scope-hound:main --json --parallel-domains auto
+```
+
+**Performance note:** Emulated AMD64 execution may be slower than native ARM64, especially during browser-based scanning. Scan runtime also depends on domains, discovered assets, and the CPU/RAM allocated to Docker. Check the architectures actually published before removing the override:
+
+```bash
+docker buildx imagetools inspect ghcr.io/jmateocarbon/scope-hound:main
+```
+
+A plain `docker pull ghcr.io/jmateocarbon/scope-hound` selects the implicit `:latest` tag, which this workflow does **not** publish. Always specify `:main` (or an available explicit release tag/digest).
 
 ### 2. Run with Docker — Linux/macOS Bash
 
@@ -399,6 +455,7 @@ docker rm scopehound
 
 | Symptom | What to check |
 | --- | --- |
+| `no matching manifest for linux/arm64/v8` on Apple Silicon | GHCR currently publishes AMD64; use `docker pull --platform linux/amd64 ...:main` and `docker run --platform linux/amd64 ...` until native ARM64 has been validated. |
 | `manifest unknown` or `not found` pulling `:main` | Check that the publish workflow succeeded, the image reference matches the repository, and the GHCR package has been made Public; otherwise use a local build. |
 | `denied` / `unauthorized` pulling from GHCR | The package may be private; review visibility and authentication. |
 | `go install ... subfinder@latest` fails | Use the tested pinned Subfinder release and compatible Go builder; inspect `docker build --progress=plain`. |
