@@ -11,7 +11,7 @@ if 'wappalyzer' not in sys.modules:
     module.Wappalyzer = object
     sys.modules['wappalyzer'] = module
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from asm import load_supplied_hosts, load_exposure_paths, PATHS_TO_CHECK, MAX_EXPOSURE_PATHS
+from asm import load_supplied_hosts, load_exposure_paths, PATHS_TO_CHECK, MAX_EXPOSURE_PATHS, parse_extra_web_ports, select_web_ports
 
 
 class InputTests(unittest.TestCase):
@@ -65,6 +65,24 @@ class ExposurePathTests(unittest.TestCase):
     def test_limit_enforced(self):
         with self.assertRaises(ValueError):
             self.load(''.join(f'/path{i}\n' for i in range(MAX_EXPOSURE_PATHS+1)))
+
+
+class WebPortTests(unittest.TestCase):
+    def test_default_standard_ports_only(self):
+        self.assertEqual(select_web_ports([80, 81, 443, 8000, 8080, 8443]), [80, 443])
+
+    def test_opt_in_common_alt_ports(self):
+        extras = parse_extra_web_ports('8443,8080,8080')
+        self.assertEqual(extras, (8080, 8443))
+        self.assertEqual(select_web_ports([80, 81, 443, 8000, 8080, 8443], extras), [80, 443, 8080, 8443])
+
+    def test_no_new_probe_of_unreported_alt_ports(self):
+        self.assertEqual(select_web_ports([80, 443], (8080, 8443)), [80, 443])
+
+    def test_reject_unknown_or_bad_ports(self):
+        for raw in ('22', '65536', '-1', '8080,', '8080,abc', '443', '8080;8443'):
+            with self.subTest(value=raw), self.assertRaises(ValueError):
+                parse_extra_web_ports(raw)
 
 
 if __name__ == '__main__':

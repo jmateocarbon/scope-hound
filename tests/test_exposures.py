@@ -69,8 +69,10 @@ class ExposureTests(unittest.TestCase):
         self.assertEqual(record['assessment'], 'Unreachable')
 
     def test_dedup_origins_and_no_browser(self):
-        targets = [{'url':'https://example.com/'}, {'url':'https://example.com/.git'},
-                   {'url':'http://example.com:8080/'}, {'url':'https://example.com/'}]
+        targets = [{'url':'https://example.com/', 'parent_domain':'example.com'},
+                   {'url':'https://example.com/.git', 'parent_domain':'example.com'},
+                   {'url':'http://example.com:8080/', 'parent_domain':'example.com'},
+                   {'url':'https://example.com/', 'parent_domain':'example.com'}]
         with patch.object(asm, 'probe_exposure', side_effect=lambda base,p: {'url':base+p}) as probe:
             results = asm.run_exposure_checks(targets, ['/.env', '/config.json'])
         self.assertEqual(len(results), 4)
