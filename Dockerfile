@@ -6,7 +6,7 @@
 # --------------------------------------------------
 # Stage 1: Build Subfinder
 # --------------------------------------------------
-FROM golang:1.26.10-bookworm AS subfinder-builder
+FROM golang:1.27.3-bookworm AS subfinder-builder
 
 ENV CGO_ENABLED=0 \
     GOTOOLCHAIN=local \
