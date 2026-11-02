@@ -18,7 +18,7 @@ RUN go install -v \
 # --------------------------------------------------
 # Stage 2: Python runtime
 # --------------------------------------------------
-FROM python:3.11-slim-bookworm
+FROM python:3.15-slim-bookworm
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
